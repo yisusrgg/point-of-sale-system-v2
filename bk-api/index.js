@@ -181,7 +181,7 @@ app.get("/obtenerVentas", (req, res) => {
             console.error("Error en la base de datos: ", err);
             return res.status(500).json({succes: false, message: "Error en la base de datos"});
         } else {
-            console.log(result)
+            //console.log(result)
             res.json(result);
         }
     });
@@ -230,8 +230,20 @@ app.get("/obtenerDetalleDeVenta", (req, res) => {
     });
 });
 
-
 app.get('/obtenerVentasTrimestrales', (req, res) => {
+    const { fecha } = req.query; 
+    console.log(fecha);
+  
+    if (!fecha) {
+      return res.status(400).json({ success: false, message: 'Falta el parámetro de fecha' });
+    }
+
+    const year = parseInt(fecha, 10);
+    
+    if (isNaN(year)) {
+      return res.status(400).json({ success: false, message: 'El parámetro de fecha debe ser un año válido' });
+    }
+  
     const query = `
       SELECT 
         p.nombre_producto AS producto,
@@ -242,37 +254,68 @@ app.get('/obtenerVentasTrimestrales', (req, res) => {
       FROM ventas v
       JOIN venta_detalles vd ON v.id_venta = vd.id_venta
       JOIN producto p ON vd.id_producto = p.id_producto
+      WHERE YEAR(v.fecha_venta) = ?
       GROUP BY p.id_producto, p.nombre_producto
       ORDER BY p.nombre_producto;
     `;
   
-    db.query(query, (err, results) => {
+    db.query(query, [year], (err, results) => {
       if (err) {
         console.error('Error en la base de datos:', err);
         return res.status(500).json({ success: false, message: 'Error en la base de datos' });
       }
+  
       res.status(200).json(results);
     });
   });
-
+  
 
   app.get('/obtenerVentasEmpleados', (req, res) => {
-    const query = `
+
+    const { fecha } = req.query; 
+
+    const isMonthFilter = fecha.includes('-');
+    let year, month;
+  
+    if (isMonthFilter) {
+
+      [year, month] = fecha.split('-');
+    } else {
+
+      year = fecha;
+    }
+
+    let query = `
       SELECT 
         CONCAT(e.Nombre, ' ', e.Apellidos) AS empleado, 
-        COUNT(DISTINCT v.id_venta) AS cant_ventas, -- Contar ventas únicas
+        COUNT(DISTINCT v.id_venta) AS cant_ventas, 
         SUM((
             SELECT SUM(vd.cantidad * vd.precio_unitario) 
             FROM venta_detalles vd 
             WHERE vd.id_venta = v.id_venta
         )) AS total
-        FROM empleados e
-        JOIN ventas v ON e.id_empleado = v.id_empleado
-        GROUP BY e.id_empleado
-        ORDER BY total DESC;
+      FROM empleados e
+      JOIN ventas v ON e.id_empleado = v.id_empleado
+    `;
+    
+    let values = [];
+  
+    if (isMonthFilter) {
+      // Filtrar por año y mes
+      query += ` WHERE YEAR(v.fecha_venta) = ? AND MONTH(v.fecha_venta) = ?`;
+      values = [year, month];
+    } else {
+      // Filtrar solo por año
+      query += ` WHERE YEAR(v.fecha_venta) = ?`;
+      values = [year];
+    }
+  
+    query += `
+      GROUP BY e.id_empleado
+      ORDER BY total DESC;
     `;
   
-    db.query(query, (err, results) => {
+    db.query(query, values, (err, results) => {
       if (err) {
         console.error('Error en la base de datos:', err);
         return res.status(500).json({ success: false, message: 'Error en la base de datos' });
@@ -280,70 +323,73 @@ app.get('/obtenerVentasTrimestrales', (req, res) => {
       res.status(200).json(results);
     });
   });
+  
+  
 
   /* APIS PARA PRODUCTOS*/
 
-// RUTA PARA MOSTRAR CLIENTES
+  // RUTA PARA MOSTRAR CLIENTES
 app.get("/mostrarClientes", (req, res) => {
-    const query = 'SELECT * FROM cliente WHERE estado_cliente = 1';
-  
+    const query = 'SELECT * FROM cliente where estado_cliente = 1;';
+
     db.query(query, (err, result) => {
-      if (err) {
-        console.error('Error en la base de datos:', err);
-        return res.status(500).json({ success: false, message: "Error en la base de datos" });
-      } else {
-        res.status(200).json(result);
-      }
+        if (err) {
+            console.error('Error en la base de datos:', err);
+            return res.status(500).json({ success: false, message: "Error en la base de datos" });
+        } else {
+            res.status(200).json(result);
+        }
     });
-  });
-  
-// RUTA PARA AGREGAR CLIENTE
-app.post("/agregarCliente", (req, res) => {
-    const { nombre, apellido, telefono, correo, direccion, ciudad, estado, codigo_postal, rfc, razon_social, regimen_fiscal } = req.body;
-    
-    db.query('CALL spInsertarCliente(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [nombre, apellido, telefono, correo, direccion, ciudad, estado, codigo_postal, rfc, razon_social, regimen_fiscal],
-      (err, result) => {
-        if (err) {
-          console.error('Error en la base de datos:', err);
-          return res.status(500).json({ success: false, message: "Error en la base de datos" });
+});
+
+  app.post("/agregarCliente", (req, res) => {
+    const query = `INSERT INTO cliente (nombre, apellido, telefono, correo, direccion, ciudad, estado, codigo_postal, rfc, razon_social, regimen_fiscal) VALUES
+(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`
+    const {nombre, apellido, telefono, correo, direccion, ciudad, estado, codigo_postal, rfc, razon_social, regimen_fiscal} = req.body;
+    const values = [nombre, apellido, telefono, correo, direccion, ciudad, estado, codigo_postal, rfc, razon_social, regimen_fiscal];
+
+    db.query(query, values, (err, result) => {
+        if(err){
+            console.error('Error en la base de datos: ', err);
+            return res.status(500).json({succes: false, message: "Error en la base de datos"});
         } else {
-          res.status(200).json({ success: true, message: "Cliente Agregado Correctamente!!" });
+            res.status(200).json({message: "Cliente Agregado Correctamente!!"});
         }
-      }
-    );
-  });
-  
-  // RUTA PARA MODIFICAR CLIENTE
-  app.put("/modificarCliente", (req, res) => {
-    const { id_cliente, nombre, apellido, telefono, correo, direccion, ciudad, estado, codigo_postal, rfc, razon_social, regimen_fiscal } = req.body;
+    }); 
     
-    db.query('CALL spActualizarCliente(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [id_cliente, nombre, apellido, telefono, correo, direccion, ciudad, estado, codigo_postal, rfc, razon_social, regimen_fiscal],
-      (err, result) => {
-        if (err) {
-          console.error('Error en la base de datos:', err);
-          return res.status(500).json({ success: false, message: "Error en la base de datos" });
+});
+
+app.put("/modificarCliente", (req, res) => {
+    const query = 'Update cliente set nombre = ?, apellido = ?, telefono = ?, correo = ?, direccion = ?, ciudad = ?, estado = ?, codigo_postal = ?, rfc = ?, razon_social = ?, regimen_fiscal = ? where id_cliente = ?;';
+    const {nombre, apellido, telefono, correo, direccion, ciudad, estado, codigo_postal, rfc, razon_social, regimen_fiscal, id_cliente} = req.body;
+    
+    const values = [nombre, apellido, telefono, correo, direccion, ciudad, estado, codigo_postal, rfc, razon_social, regimen_fiscal, id_cliente];
+
+    db.query(query, values, (err, result) => {
+        if(err){
+            console.error("Error en la base de datos: ", err);
+            return res.status(500).json({ succes: false, message: "Error en la base de datos!!"});
         } else {
-          res.status(200).json({ success: true, message: "Cliente Modificado Correctamente!!" });
+            res.status(200).json({message: "Cliente Modificado con Exito!!"});
         }
-      }
-    );
-  });
-  
-  // RUTA PARA ELIMINAR CLIENTE
-  app.put("/eliminarCliente", (req, res) => {
+    });
+});
+
+app.put("/eliminarCliente", (req, res) => {
+    const query = 'UPDATE cliente SET estado_cliente = 0 WHERE id_cliente = ?';
     const { id_cliente } = req.body;
-    
-    db.query('CALL eliminarCliente(?)', [id_cliente], (err, result) => {
-      if (err) {
-        console.error('Error en la base de datos:', err);
-        return res.status(500).json({ success: false, message: "Error en la base de datos" });
-      } else {
-        res.status(200).json({ success: true, message: "Cliente eliminado correctamente" });
-      }
+
+    const values = [id_cliente];
+
+    db.query(query, values, (err, result) => {
+        if (err) {
+            console.error("Error en la base de datos: ", err);
+            return res.status(500).json({ success: false, message: "Error en la base de datos." });
+        } else {
+            res.status(200).json({ success: true, message: "Cliente eliminado con éxito." });
+        }
     });
-  });
+});
 
 //=========================================================================================================
 
@@ -444,21 +490,22 @@ app.post("/registrarVenta", async (req, res) =>{
 })
 
 //RUTA PARA BUSCAR CLIENTE  eg: http://localhost:3002/cliente/nombre
-app.get("/cliente/:nombre", async(req,res) =>{
-    const nombre = req.params.nombre;
-    const query = 'select id_cliente from cliente where nombre=?';
+app.get("/clientes", async (req, res) => {
+    const query = 'SELECT nombre, id_cliente FROM cliente where estado_cliente = 1';
+    
     try {
-        const [result] = await db.promise().query(query, [nombre]);
+        const [result] = await db.promise().query(query);
+        
         if (result.length > 0) {
-            res.json(result);
-        }else {
-            res.status(404).json({ success: false, message: "Cliente no valido"});
+            res.json({ success: true, data: result });
+        } else {
+            res.status(404).json({ success: false, message: "No se encontraron clientes" });
         }
     } catch (err) {
         console.error('Error en la base de datos:', err);
         res.status(500).json({ success: false, message: "Error en la base de datos" });
     }
-})
+});
 
 
 app.listen(3002, () => {

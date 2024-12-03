@@ -1,16 +1,35 @@
 'use client'
 
-import React, { useState } from 'react'
-import {Box,Button,TextField,Typography,Paper,Table,TableBody,TableCell,TableContainer,
-  TableHead,TableRow,IconButton,Toolbar,Dialog,DialogTitle,DialogContent,DialogActions} from '@mui/material'
+import React, { useState, useEffect } from 'react'
+import {
+  Box,
+  Button,
+  TextField,
+  Typography,
+  Paper,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  IconButton,
+  Toolbar,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Autocomplete
+} from '@mui/material'
 import FondoAnimado from '../Components/FondoAnimado.tsx'
 import NavBar from '../Components/NavBar.tsx'
 import CustomToolbar from '../Components/CustomToolbar.tsx'
 import { styled } from '@mui/material/styles'
 import { TableVirtuoso, TableComponents } from 'react-virtuoso'
-import {DatosGlobalesContexto} from '../Components/ContextoDatosGlobales.js';
-import DeleteIcon from '@mui/icons-material/Delete';
-import { useSymbologyScanner } from '@use-symbology-scanner/react';
+import {DatosGlobalesContexto} from '../Components/ContextoDatosGlobales.js'
+import DeleteIcon from '@mui/icons-material/Delete'
+import { useSymbologyScanner } from '@use-symbology-scanner/react'
+import axios from 'axios'
 
 const drawerWidth = 240
 
@@ -49,6 +68,11 @@ interface ColumnData {
   width: number;
 }
 
+interface Cliente {
+  id_cliente: number;
+  nombre: string;
+}
+
 const columns: ColumnData[] = [
   {
     width: 60,
@@ -83,7 +107,7 @@ const columns: ColumnData[] = [
     label: 'Acción',
     dataKey: 'action',
   },
-];
+]
 
 const VirtuosoTableComponents: TableComponents<Data> = {
   Scroller: React.forwardRef<HTMLDivElement>((props, ref) => (
@@ -97,7 +121,7 @@ const VirtuosoTableComponents: TableComponents<Data> = {
   TableBody: React.forwardRef<HTMLTableSectionElement>((props, ref) => (
     <TableBody {...props} ref={ref} />
   )),
-};
+}
 
 function fixedHeaderContent() {
   return (
@@ -114,107 +138,115 @@ function fixedHeaderContent() {
         </TableCell>
       ))}
     </TableRow>
-  );
+  )
 }
-
 
 export default function Component() {
   const [open, setOpen] = useState(true)
   const [selectedItem, setSelectedItem] = useState('/sales')
-  const datosGlobales = React.useContext(DatosGlobalesContexto);
+  const datosGlobales = React.useContext(DatosGlobalesContexto)
   const [codigo, setCodigo] = useState('')
-  const [rows, setColumnas] = useState<Data[]>([]);
-  const [nuevaCantidad, setNuevaCantidad] = useState<number|null>(0);
-  const [productos, setProductos] = useState<{id_producto: number; codigo: string; cantidad: number; precio: number; descripcion: string; stock: number}[]>([]);
+  const [rows, setColumnas] = useState<Data[]>([])
+  const [nuevaCantidad, setNuevaCantidad] = useState<number|null>(1)
+  const [productos, setProductos] = useState<{id_producto: number; codigo: string; cantidad: number; precio: number; descripcion: string; stock: number}[]>([])
   const [totalVenta, setTotalVenta] = useState(0)
   const [valueNombre, setNombre] = useState('')
-  const cantidadRef = React.useRef(null);
-  const codigoRef = React.useRef(null);
-  const pagoRef = React.useRef(null);
+  const cantidadRef = React.useRef(null)
+  const codigoRef = React.useRef(null)
+  const pagoRef = React.useRef(null)
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
   const [paymentAmount, setPaymentAmount] = useState<string>('')
   const [confirmationDialogOpen, setConfirmationDialogOpen] = useState(false)
   const [ticketDialogOpen, setTicketDialogOpen] = useState(false)
   const [valueCliente, setValueCliente] = useState(1)
   const [cliente, setCliente] = useState('Mostrador')
+  const [clientes, setClientes] = useState<Cliente[]>([])
 
-
-  React.useEffect(() => {
+  useEffect(() => {
     const total = productos.reduce((acc, prod) => acc + prod.cantidad * prod.precio, 0)
     setTotalVenta(total)
     codigoRef.current.focus()
+
+    // Fetch clients
+    axios.get('http://localhost:3002/clientes')
+      .then(response => {
+        if (response.data.success) {
+          setClientes(response.data.data.map(client => ({ id_cliente: client.id_cliente, nombre: client.nombre })))
+        } else {
+          console.error('Error fetching clients:', response.data.message)
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching clients:', error)
+      })
   }, [productos])
   
-  const toggleDrawer = () => {setOpen(!open)}
-  const onCodigoChange=(e)=>{
-    setCodigo(e.target.value)
-    if(e.target.value==="")
-      setCodigo('')
-    else
-      buscarProducto(e.target.value)
+  const toggleDrawer = () => {
+    setOpen(!open)
   }
+
+  const onCodigoChange = (e) => {
+    setCodigo(e.target.value)
+    if(e.target.value === "") {
+      setCodigo('')
+    } else {
+      buscarProducto(e.target.value)
+    }
+  }
+
   const onCantidadChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let nvCantidad = parseInt(e.target.value, 10); 
-    if(nvCantidad>0)
-      setNuevaCantidad(nvCantidad);
+    setNuevaCantidad(nvCantidad);
   }
-  const onNombreChange=(e)=>{
+
+  const onNombreChange = (e) => {
     setNombre(e.target.value)
-    if(e.target.value==='')
+    if(e.target.value === '') {
       setCodigo('')
-    else
+    } else {
       buscarProductoNombre(e.target.value)
+    }
   }
-  const onClienteChange=(e)=>{
-    setCliente(e.target.value)
-    console.log(e.target.value)
-    if (e.target.value!== null && e.target.value!==''){
-      fetch(`http://localhost:3002/cliente/${e.target.value}`)
-        .then((response) => response.json())
-        .then((json) => {
-          if (json.success === false) {
-            console.log("Cliente no valido");
-            setValueCliente(1)
-          } else {
-            console.log("id_cliente",json[0].id_cliente)
-            setValueCliente(json[0].id_cliente)
-          }
-        }).catch(() => {
-          alert("Error en el servidor");
-        });
-    }else{
+
+  const handleClienteChange = (event, newValue) => {
+    if (newValue) {
+      setCliente(newValue.nombre)
+      setValueCliente(newValue.id_cliente)
+    } else {
+      setCliente('Mostrador')
       setValueCliente(1)
     }
   }
 
-  const limpiar =()=>{
+  const limpiar = () => {
     setNombre('')
     setCodigo('')
-    setNuevaCantidad(0)
+    setNuevaCantidad(1)
     setPaymentAmount('')
     codigoRef.current.focus()
   }
   
-  const buscarProducto=(eCod)=>{
+  const buscarProducto = (eCod) => {
     console.log(eCod)
-    if (eCod !== null ){
+    if (eCod !== null) {
       fetch(`http://localhost:3002/buscarProducto/${eCod}`)
         .then((response) => response.json())
         .then((json) => {
           if (json.success === false) {
-            console.log("Producto no encontrado");
+            console.log("Producto no encontrado")
             setNombre("")
           } else {
             setNombre(json[0].nombre_producto)
           }
         }).catch(() => {
-          alert("Error en el servidor");
-        });
+          alert("Error en el servidor")
+        })
     }
   }
-  const buscarProductoNombre=(eCod)=>{
+
+  const buscarProductoNombre = (eCod) => {
     console.log(eCod)
-    if (eCod !== null ){
+    if (eCod !== null) {
       fetch(`http://localhost:3002/buscarProductoNombre/${eCod}`)
         .then((response) => response.json())
         .then((json) => {
@@ -225,14 +257,15 @@ export default function Component() {
             setCodigo(json[0].codigo)
           }
         }).catch(() => {
-          alert("Error en el servidor");
-        });
+          alert("Error en el servidor")
+        })
     }
   }
+
   const agregaProducto=()=>{
-    if (codigo !== null && codigo!=='' && valueNombre!=='' && nuevaCantidad!==0){
+    if (codigo !== null && codigo!=='' && valueNombre!=='' && nuevaCantidad!==null && nuevaCantidad>0 ){
       fetch(`http://localhost:3002/buscarProducto/${codigo}`)
-        .then((response) => response.json())
+        .then((response) => response.json())  
         .then((json) => {
           if (json.success === false) {
             alert("Producto no encontrado");
@@ -257,11 +290,13 @@ export default function Component() {
       codigoRef.current.focus();
     }else if( valueNombre===''){
       alert("Debe ingesar un nombre")
-    }else if(nuevaCantidad===0){
+    }else if(nuevaCantidad===null || Number.isNaN(nuevaCantidad) || nuevaCantidad<=0){
+      console.log(nuevaCantidad)
       alert("Debe ingesar una cantidad mayor a cero")
       cantidadRef.current.focus();
     }
   }
+
   const ventaData = {
     productos: productos,
     id_empleado: datosGlobales.data.id_empleado,
@@ -269,16 +304,19 @@ export default function Component() {
     metodo_de_pago: 'Tarjeta de crédito',
     cantidad_pagada: paymentAmount
   }
-  const onGuardar=()=>{
-    if(productos.length>0)
+
+  const onGuardar = () => {
+    if(productos.length > 0) {
       setPaymentDialogOpen(true)
+    }
   }
-  const onCancelar=()=>{
+
+  const onCancelar = () => {
     limpiar()
     setProductos([])
     setColumnas([])
-    setCliente('Mostrador')
     setValueCliente(1)
+    setCliente('Mostrador')
   }
 
   const actualizarProducto = (nuevoProducto) => {
@@ -289,7 +327,7 @@ export default function Component() {
       if (productoExistente) {
         return prevProductos.map((producto) =>
           producto.id_producto === nuevoProducto.id_producto
-            ? { ...producto, cantidad: nuevoProducto.cantidad }
+            ? { ...producto, cantidad: producto.cantidad + nuevoProducto.cantidad }
             : producto
         );
       } else {
@@ -304,7 +342,7 @@ export default function Component() {
       if (columnaExistente) {
         return prevColumnas.map((columna) =>
           columna.id_producto === nuevoProducto.id_producto
-            ? { ...columna, cantidad:nuevoProducto.cantidad }
+            ? { ...columna, cantidad: columna.cantidad + nuevoProducto.cantidad }
             : columna
         );
       } else {
@@ -312,6 +350,7 @@ export default function Component() {
       }
     });
   };
+
   const eliminarProducto = (id_producto: number) => {
     setProductos((prev) => {
       const productosActualizados = prev.filter((prod) => prod.id_producto !== id_producto);
@@ -321,17 +360,17 @@ export default function Component() {
   };
 
   const handlePaymentConfirm = () => {
-    if(paymentAmount!==''){
+    if(paymentAmount !== '') {
       setPaymentDialogOpen(false)
       setConfirmationDialogOpen(true)
-    }else{
-      alert("Debes ingrear una cantidad")
+    } else {
+      alert("Debe ingresar una cantidad")
       pagoRef.current.focus()
     }
   }
 
   const handleSaleConfirm = () => {
-    if(productos.length>0){
+    if(productos.length > 0) {
       fetch('http://localhost:3002/registrarVenta', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -339,49 +378,73 @@ export default function Component() {
       })
       .then(response => response.json())
       .then(data => {
-          if(data.success === true){
+          if(data.success === true) {
             setConfirmationDialogOpen(false)
             setTicketDialogOpen(true)
-          }else{
+          } else {
             alert(data.message)
           }
       })
       .catch(error => {
           alert(error)
-          console.error('Error:', error);
-      });
+          console.error('Error:', error)
+      })
     }
   }
   
-  const rowContent=(_index: number, row: Data)=>{
+  const rowContent = (index: number, row: Data) => {
+    const handleCantidadChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const nuevaCantidad = parseInt(e.target.value, 10) || 0; // Asegúrate de manejar valores no numéricos como 0
+      setColumnas((prevColumnas) =>
+        prevColumnas.map((columna) =>
+          columna.id_producto === row.id_producto
+            ? { ...columna, cantidad: nuevaCantidad }
+            : columna
+        )
+      );
+      setProductos((prevProductos) =>
+        prevProductos.map((producto) =>
+          producto.id_producto === row.id_producto
+            ? { ...producto, cantidad: nuevaCantidad }
+            : producto
+        )
+      );
+    };
+  
     return (
       <React.Fragment>
         {columns.map((column) => (
           <TableCell
             key={column.dataKey}
             align={column.numeric ? 'right' : 'left'}
-            sx={{ fontSize: '0.8rem' }}
+            style={{ width: column.width }}
           >
-            {column.dataKey === 'action' ? (
-              <IconButton
+            {column.dataKey === 'cantidad' ? (
+              <TextField
+                type="number"
+                value={row.cantidad}
+                onChange={handleCantidadChange}
+                inputProps={{ min: 0, style: { textAlign: 'right' } }}
                 size="small"
+                fullWidth
+              />
+            ) : column.dataKey === 'action' ? (
+              <IconButton
                 onClick={() => eliminarProducto(row.id_producto)}
-                sx={{ 
-                  color: 'error.main',
-                  '&:hover': {
-                    backgroundColor: 'error.light',
-                  }
-                }}
+                color="error"
+                size="small"
               >
-                <DeleteIcon fontSize="small" />
+                <DeleteIcon />
               </IconButton>
-            ) :
-            row[column.dataKey]}
+            ) : (
+              row[column.dataKey as keyof Data]
+            )}
           </TableCell>
         ))}
       </React.Fragment>
     );
-  }
+  };
+  
 
   return (
     <FondoAnimado>
@@ -428,7 +491,6 @@ export default function Component() {
                       size="small"
                     />
                   </Box>
-                  
                 </Box>
                 
                 <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr 2fr', gap: 2, mb: 2}}>
@@ -445,17 +507,19 @@ export default function Component() {
                   </Box>
                   <Box>
                     <Typography variant="caption">Cliente:</Typography>
-                    <TextField
+                    <Autocomplete
+                      options={clientes}
+                      getOptionLabel={(option) => option.nombre}
+                      renderInput={(params) => <TextField {...params} size="small" />}
+                      value={clientes.find(c => c.id_cliente === valueCliente) || null}
+                      onChange={handleClienteChange}
                       fullWidth
-                      size="small"
-                      onChange={onClienteChange}
-                      value={cliente}
                     />
                   </Box>
-                  <Box sx={{ display: 'flex', justifyContent: 'center',alignItems: 'center', gap: 10, mt: 3, width: '100%'}}>
+                  <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 10, mt: 3, width: '100%'}}>
                     <Button 
                       variant="outlined"
-                      sx={{ borderRadius: 20 ,  width: '80%' }}
+                      sx={{ borderRadius: 20, width: '80%' }}
                       onClick={agregaProducto}
                     >
                       Agregar Producto
@@ -463,8 +527,6 @@ export default function Component() {
                   </Box>
                 </Box>
               </Box>
-
-              
             </Box>
 
             <Paper style={{ height: 240, width: '100%', maxWidth: 1300, margin: '0 auto' }}>
@@ -478,15 +540,16 @@ export default function Component() {
 
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 7 }}>
               <Button 
-                  variant="outlined"
-                  size="small" 
-                  sx={{ borderRadius: 20,
-                        px: 3,         
-                        py: 1.5,       
-                        fontSize: '1rem'
-                  }}
-                  onClick={onCancelar}
-                >
+                variant="outlined"
+                size="small" 
+                sx={{ 
+                  borderRadius: 20,
+                  px: 3,         
+                  py: 1.5,       
+                  fontSize: '1rem'
+                }}
+                onClick={onCancelar}
+              >
                 Cancelar
               </Button>
               <Button 
@@ -608,7 +671,7 @@ export default function Component() {
         <DialogTitle>Ticket de Venta || Resumen de la venta</DialogTitle>
         <DialogContent>
           <Typography>Fecha: {new Date().toLocaleDateString()}</Typography>
-          <Typography>Empleado que realizo la venta: {`${datosGlobales.data.Nombre} ${datosGlobales.data.Apellidos}`}</Typography>
+          <Typography>Empleado que realizó la venta: {`${datosGlobales.data.Nombre} ${datosGlobales.data.Apellidos}`}</Typography>
           <Typography>Cliente: {cliente}</Typography>
           <TableContainer component={Paper} sx={{ marginTop: 2, marginBottom: 2 }}>
             <Table size="small">
@@ -637,7 +700,7 @@ export default function Component() {
           <Typography>Cambio: ${(parseFloat(paymentAmount) - totalVenta).toFixed(2)}</Typography>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => {setTicketDialogOpen(false); limpiar(); setCliente('Mostrador'); setValueCliente(1); setProductos([]); setColumnas([])}} variant="contained" color="primary">
+          <Button onClick={() => {setTicketDialogOpen(false); limpiar(); setCliente('Mostrador');setValueCliente(1); setProductos([]); setColumnas([])}} variant="contained" color="primary">
             Cerrar
           </Button>
         </DialogActions>

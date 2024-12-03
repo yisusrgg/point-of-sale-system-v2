@@ -19,12 +19,17 @@ import {
   DialogContent,
   Tab,
   Tabs,
+  Button,
 } from '@mui/material'
 import Axios from 'axios'
 import { styled } from '@mui/material/styles'
 import FondoAnimado from '../Components/FondoAnimado.tsx'
 import NavBar from '../Components/NavBar.tsx'
 import CustomToolbar from '../Components/CustomToolbar.tsx'
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs'
+import { DateCalendar } from '@mui/x-date-pickers/DateCalendar'
+import dayjs, { Dayjs } from 'dayjs'
 
 const drawerWidth = 240
 
@@ -80,7 +85,6 @@ interface QuarterlySales {
 export default function SalesReport() {
   const [open, setOpen] = useState(true)
   const [sales, setSales] = useState<Sale[]>([])
-  const [cliente, setCliente] = useState()
   const [employeeSales, setEmployeeSales] = useState<EmployeeSales[]>([])
   const [quarterlySales, setQuarterlySales] = useState<QuarterlySales[]>([])
   const [venta, setVenta] = useState<Sale | null>(null)
@@ -88,27 +92,56 @@ export default function SalesReport() {
   const [timeFilter, setTimeFilter] = useState<string | null>('day')
   const [openDialog, setOpenDialog] = useState(false)
   const [tabValue, setTabValue] = useState(0)
+  const [selectedDate, setSelectedDate] = useState<Dayjs | null>(dayjs())
+  const [employeeSelectedDate, setEmployeeSelectedDate] = useState<Dayjs | null>(dayjs())
+  const [quarterlySelectedYear, setQuarterlySelectedYear] = useState<Dayjs | null>(dayjs())
 
   useEffect(() => {
-    // Fetch obtener ventas por periodo
+
     fetch('http://localhost:3002/obtenerVentas')
       .then((response) => response.json())
       .then((data) => setSales(data))
-      .catch((error) => console.error('Error al obtener las ventas:', error))
+      .catch((error) => console.error('Error al obtener las ventas:', error));
+  
+    if (employeeSelectedDate) {
+      fetchSales(employeeSelectedDate);
+    }
 
-    // Fetch obtener ventas por empleado
-    fetch('http://localhost:3002/obtenerVentasEmpleados')
+    if (quarterlySelectedYear) {
+      fetchSalesComp(quarterlySelectedYear);
+    }
+  
+  }, [employeeSelectedDate,quarterlySelectedYear]);
+
+  const fetchSales = (date: Dayjs) => {
+    const formattedDate = date.format('YYYY-MM'); 
+  
+    fetch(`http://localhost:3002/obtenerVentasEmpleados?fecha=${formattedDate}`, {
+      method: 'GET',
+    })
       .then((response) => response.json())
-      .then((data) => setEmployeeSales(data))
-      .catch((error) => console.error('Error al obtener las ventas por empleado:', error))
-
-    // Fetch obtener ventas de productos
-    fetch('http://localhost:3002/obtenerVentasTrimestrales')
+      .then((data) => {
+        setEmployeeSales(data); 
+      })
+      .catch((error) => console.error('Error al obtener las ventas por empleado:', error));
+  };
+  
+  const fetchSalesComp = (date: Dayjs) => {
+    const formattedDate = date.format('YYYY');
+  
+    fetch(`http://localhost:3002/obtenerVentasTrimestrales?fecha=${formattedDate}`, {
+      method: 'GET',
+    })
       .then((response) => response.json())
-      .then((data) => setQuarterlySales(data))
-      .catch((error) => console.error('Error al obtener las ventas trimestrales:', error))
-  }, [])
-
+      .then((data) => {
+        setQuarterlySales(data); // Asegúrate de usar setQuarterlySales
+      })
+      .catch((error) => console.error('Error al obtener las ventas trimestrales:', error));
+  };
+  
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue)
+  }
   const toggleDrawer = () => {
     setOpen(!open)
   }
@@ -125,8 +158,6 @@ export default function SalesReport() {
     })
       .then((response) => {
         setVenta(sale)
-        console.log(sale);
-        //setCliente(sale.cliente);
         setSelectedSale(response.data)
         setOpenDialog(true)
       })
@@ -141,23 +172,20 @@ export default function SalesReport() {
   }
 
   const filterSales = (sales: Sale[], filter: string | null): Sale[] => {
-    const currentDate = new Date()
-    currentDate.setHours(0, 0, 0, 0)
+    const currentDate = dayjs()
 
     return sales.filter((sale) => {
-      const saleDate = new Date(sale.fecha_venta)
-      saleDate.setHours(0, 0, 0, 0)
+      const saleDate = dayjs(sale.fecha_venta)
 
       switch (filter) {
         case 'day':
-          return saleDate.getTime() === currentDate.getTime()
+          return saleDate.isSame(currentDate, 'day')
         case 'week':
-          const weekAgo = new Date(currentDate.getTime() - 7 * 24 * 60 * 60 * 1000)
-          return saleDate >= weekAgo && saleDate <= currentDate
+          return saleDate.isAfter(currentDate.subtract(1, 'week')) && saleDate.isBefore(currentDate)
         case 'month':
-          return saleDate.getMonth() === currentDate.getMonth() && saleDate.getFullYear() === currentDate.getFullYear()
+          return saleDate.isSame(selectedDate, 'month') && saleDate.isSame(selectedDate, 'year')
         case 'year':
-          return saleDate.getFullYear() === currentDate.getFullYear()
+          return saleDate.isSame(selectedDate, 'year')
         default:
           return true
       }
@@ -180,13 +208,25 @@ export default function SalesReport() {
     year: 'Año',
   }[timeFilter || 'day']
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue)
+
+  const handleFilterByDate = () => {
+    
+    console.log('Filtering by date:', selectedDate?.format('YYYY-MM-DD'))
+  }
+
+  const handleFilterByEmployeeDate = () => {
+    
+    console.log('Filtering employee sales by date:', employeeSelectedDate?.format('YYYY-MM'))
+  }
+
+  const handleFilterByQuarterlyYear = () => {
+    
+    console.log('Filtering quarterly sales by year:', quarterlySelectedYear?.format('YYYY'))
   }
 
   return (
     <FondoAnimado>
-      <NavBar toggleDrawer={toggleDrawer} />
+      <NavBar toggleDrawer={() => setOpen(!open)} />
       <CustomToolbar open={open} selectedItem={'/reports'} setSelectedItem={() => {}} />
       <Main open={open}>
         <Toolbar />
@@ -198,15 +238,26 @@ export default function SalesReport() {
               <Tab label="Ventas Trimestrales" />
             </Tabs>
 
+            {/* Pestaña Ventas por Fecha */}
             {tabValue === 0 && (
               <Box>
-                <Box sx={{ mb: 3, mt: 3 }}>
+                <Box sx={{ mb: 3, mt: 3, display: 'flex', alignItems: 'center', gap: 2 }}>
                   <ToggleButtonGroup value={timeFilter} exclusive onChange={handleTimeFilterChange} aria-label="filtro de tiempo">
                     <ToggleButton value="day" aria-label="día">Día</ToggleButton>
                     <ToggleButton value="week" aria-label="semana">Semana</ToggleButton>
                     <ToggleButton value="month" aria-label="mes">Mes</ToggleButton>
                     <ToggleButton value="year" aria-label="año">Año</ToggleButton>
                   </ToggleButtonGroup>
+                  {(timeFilter === 'month' || timeFilter === 'year') && (
+                    <LocalizationProvider dateAdapter={AdapterDayjs}>
+                      <DateCalendar 
+                        views={timeFilter === 'month' ? ['month'] : ['year']}
+                        value={selectedDate}
+                        onChange={(newValue) => setSelectedDate(newValue)}
+                      />
+                    </LocalizationProvider>
+                  )}
+                  
                 </Box>
                 <Typography variant="h5" sx={{ mb: 2, textAlign: 'center' }}>
                   Total General ({periodName}): ${totalGeneratedFormatted}
@@ -236,11 +287,21 @@ export default function SalesReport() {
               </Box>
             )}
 
+            {/* Pestaña Ventas por Empleado */}
             {tabValue === 1 && (
               <Box sx={{ mt: 3 }}>
                 <Typography variant="h6" sx={{ mb: 2, textAlign: 'center' }}>
-                  Reporte de Ventas por Empleado - Noviembre 2024
+                  Reporte de Ventas por Empleado
                 </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                  <LocalizationProvider dateAdapter={AdapterDayjs}>
+                    <DateCalendar 
+                      views={['year', 'month']}
+                      value={employeeSelectedDate}
+                      onChange={(newValue) => setEmployeeSelectedDate(newValue)} 
+                    />
+                  </LocalizationProvider>
+                </Box>
                 <TableContainer>
                   <Table>
                     <TableHead>
@@ -252,10 +313,9 @@ export default function SalesReport() {
                     </TableHead>
                     <TableBody>
                       {employeeSales.map((employee) => {
-                        // Validación para asegurar que `total` es un número
                         const total = typeof employee.total === 'number'
                           ? employee.total
-                          : parseFloat(employee.total as unknown as string) || 0; // Convierte a número o usa 0 como fallback
+                          : parseFloat(employee.total as unknown as string) || 0;
 
                         return (
                           <TableRow key={employee.empleado}>
@@ -271,12 +331,21 @@ export default function SalesReport() {
               </Box>
             )}
 
-
-            {tabValue === 2 && (
+{tabValue === 2 && (
               <Box sx={{ mt: 3 }}>
                 <Typography variant="h6" sx={{ mb: 2, textAlign: 'center' }}>
-                  Reporte de Ventas Trimestrales por Empleado - 2024
+                  Reporte de Ventas Trimestrales por Empleado
                 </Typography>
+                <Box sx={{ display: 'flex', justifyContent: 'center', mb: 2 }}>
+                  <LocalizationProvider dateAdapter={AdapterDayjs}>
+                    <DateCalendar 
+                      views={['year']}
+                      value={quarterlySelectedYear}
+                      onChange={(newValue) => setQuarterlySelectedYear(newValue)}
+                    />
+                  </LocalizationProvider>
+                  
+                </Box>
                 <TableContainer>
                   <Table>
                     <TableHead>
@@ -306,7 +375,6 @@ export default function SalesReport() {
           </Paper>
         </Box>
       </Main>
-
       {selectedSale && (
         <Dialog open={openDialog} onClose={handleCloseDialog} fullWidth maxWidth="md">
           <DialogTitle>Detalles de la Venta</DialogTitle>
